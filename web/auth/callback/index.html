@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Auth Callback</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { background:#0a0a0a; color:#d4af37; font-family: system-ui, sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; margin:0 }
+    .box { border:1px solid rgba(212,175,55,.3); padding:16px; border-radius:6px; background:rgba(0,0,0,.6) }
+  </style>
+</head>
+<body>
+  <div class="box">Completing sign-in...</div>
+  <script>
+    try {
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get('code');
+      const error = url.searchParams.get('error');
+      const payload = code ? { type: 'auth_code', code } : { type: 'auth_error', error };
+      const origin = window.location.origin;
+      if (window.opener && (code || error)) {
+        window.opener.postMessage(payload, origin);
+      }
+    } catch (e) {
+      // ignore
+    } finally {
+      try { window.close(); } catch (_) {}
+    }
+  </script>
+</body>
+</html>
+
+

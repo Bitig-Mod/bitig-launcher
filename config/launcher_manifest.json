@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "launcherVersion": "0.1.7",
+  "displayName": "Bitig Launcher",
+  "iconUrl": "https://drive.google.com/uc?export=download&id=1U8qDFvx7_Zw0-aaxdetnGDIEJ5gnh4V8",
+  "platforms": {
+    "windows": {
+      "downloadUrl": "https://www.dropbox.com/scl/fi/gfkq6up0uy5zbytepwkpk/mc_ui_windows.zip?rlkey=x2n6vvk7q9ojd4oj9277b7grw&st=co6zqhzn&dl=1",
+      "packageFormat": "zip",
+      "executable": "mc_ui.exe"
+    },
+    "linux": {
+      "downloadUrl": "https://example.com/dist/mc_ui_linux.zip",
+      "packageFormat": "zip",
+      "executable": "mc_ui"
+    },
+    "macos": {
+      "downloadUrl": "https://example.com/dist/mc_ui_macos.zip",
+      "packageFormat": "zip",
+      "executable": "mc_ui.app"
+    }
+  }
+}

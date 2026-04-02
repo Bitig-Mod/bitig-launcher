@@ -1,0 +1,33 @@
+{
+  "launcher": {
+    "launcherVersion": "0.1.7",
+    "launcherDownloadUrl": "https://google.com",
+    "featuredVideoUrl": "https://samplefile.com/samples/download/video/mp4/mp4_sample_file_25MB.mp4/",
+    "gameManifestUrl": "https://launchermeta.mojang.com/mc/game/version_manifest.json",
+    "forgePromotionsUrl": "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json",
+    "minecraftAssetUrl": "https://resources.download.minecraft.net",
+    "mavenRepositories": ["https://maven.minecraftforge.net", "https://repo1.maven.org/maven2"]
+  },
+  "modpacks": [
+    {
+      "name": "TAP Iron Ore",
+      "modpackVersion": "1",
+      "live": true,
+      "mcVersion": "1.7.10",
+      "forgeVersion": "10.13.4.1614-1.7.10",
+      "iconPng": "https://cdn.discordapp.com/attachments/578238504538996737/1488829615354019982/tap.png?ex=69ce3421&is=69cce2a1&hm=589a37165e9a24c1d1ddc74b01c549295c7fe8aed66df81ce78832876ed523e0&",
+      "videoUrl": "https://drive.google.com/uc?export=download&id=181h3UD4f3HzpQMQHi7GGPweDJMRLNCDw",
+      "zipUrl": "https://downloader.disk.yandex.ru/disk/a8ac3b19c35ee2a5ed14f3f0d42add5e247f06c1bb6fbd6503a6719cf8367b8f/69cd1bcc/GONPkBvfd3h8rFIrAU5Q5IK6ZGAYW83pcKx4UsGAYB8hPbjXQi6dEM0O8EjuF7Qfw5gEJ_MXUkO0jOZjMOnakg%3D%3D?uid=0&filename=ww2-public-beta-1.1.zip&disposition=attachment&hash=1CcJpnIsZDTz8wF/IxoXsllnAysVcFbY46H4b8mokCcr0d8AsAKOS2DpAdS4n8CNq/J6bpmRyOJonT3VoXnDag%3D%3D%3A&limit=0&content_type=application%2Fzip&owner_uid=1244355529&fsize=305176544&hid=c7573a0c8289f6338fa1590d0a313925&media_type=compressed&tknv=v3"
+    },
+    {
+      "name": "Resurrection - Test Pack",
+      "modpackVersion": "1",
+      "live": false,
+      "mcVersion": "1.7.10",
+      "forgeVersion": "10.13.4.1614-1.7.10",
+      "iconPng": "https://cdn.technicpack.net/platform2/pack-icons/1429844.png?1595879047",
+      "videoUrl": "https://cdn.discordapp.com/attachments/578238504538996737/1488854374183731361/killmontage2.mp4?ex=69ce4b30&is=69ccf9b0&hm=d5121ff37906a0b090bbb37848f9a0ed4ba060ecf61bf30540d596bec9376491&",
+      "zipUrl": "https://www.dropbox.com/scl/fi/zuz4l6kn09tmesfa6fjwp/modpack.zip?rlkey=ylba65vnklqzooz2fz8i7ag1y&st=6btbiz4w&dl=1"
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Bitig Launcher.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Bitig Launcher">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Bitig Launcher</title>
+  <link rel="manifest" href="manifest.json">
+  <script>
+    (function(){
+      try {
+        var u = new URL(window.location.href);
+        var p = u.pathname;
+        if (p === '/auth/callback' || p === '/callback.html' || p.indexOf('/auth/callback/') === 0) {
+          // Best-effort: ensure SW won't interfere on this path
+          try {
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function(regs){ regs.forEach(function(r){ r.unregister(); }); });
+            }
+            if (window.caches && window.caches.keys) {
+              caches.keys().then(function(keys){ keys.forEach(function(k){ caches.delete(k); }); });
+            }
+          } catch(_) {}
+
+          var code = u.searchParams.get('code');
+          var err  = u.searchParams.get('error');
+          var state= u.searchParams.get('state');
+          var payload = JSON.stringify(code ? {type:'auth_code', code:code, state:state} : {type:'auth_error', error:err, state:state});
+          if (window.opener && (code || err)) {
+            window.opener.postMessage(payload, window.location.origin);
+          }
+          try { window.close(); } catch(_) {}
+          // Fallback in case close() is blocked (JCEF / browser policy)
+          setTimeout(function(){ try { window.location.replace('/'); } catch(_) {} }, 1200);
+        }
+      } catch(_) {}
+    })();
+  </script>
+</head>
+<body>
+  <script>
+    // Simple initialization for JCEF compatibility
+    window.addEventListener('load', function(ev) {
+      // Wait for flutter_bootstrap.js to load
+      if (window._flutter && window._flutter.loader) {
+        window._flutter.loader.loadEntrypoint({
+          onEntrypointLoaded: function (engineInitializer) {
+            engineInitializer.initializeEngine({
+              renderer: "html"
+            }).then(function (appRunner) {
+              appRunner.runApp();
+            });
+          }
+        });
+      } else {
+        // Fallback: retry after a short delay
+        setTimeout(function() {
+          if (window._flutter && window._flutter.loader) {
+            window._flutter.loader.loadEntrypoint({
+              onEntrypointLoaded: function (engineInitializer) {
+                engineInitializer.initializeEngine({
+                  renderer: "html"
+                }).then(function (appRunner) {
+                  appRunner.runApp();
+                });
+              }
+            });
+          }
+        }, 100);
+      }
+    });
+  </script>
+  <script src="flutter_bootstrap.js"></script>
+</body>
+</html>
