@@ -52,3 +52,6 @@ deploy.json
 
 mc_ui.iml
 
+mc_ui_windows.zip
+*.zip
+

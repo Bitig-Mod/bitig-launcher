@@ -5,7 +5,7 @@
   "iconUrl": "https://drive.google.com/uc?export=download&id=1U8qDFvx7_Zw0-aaxdetnGDIEJ5gnh4V8",
   "platforms": {
     "windows": {
-      "downloadUrl": "https://www.dropbox.com/scl/fi/gfkq6up0uy5zbytepwkpk/mc_ui_windows.zip?rlkey=x2n6vvk7q9ojd4oj9277b7grw&st=co6zqhzn&dl=1",
+      "downloadUrl": "https://github.com/Bitig-Mod/bitig-launcher/releases/latest/download/mc_ui_windows.zip",
       "packageFormat": "zip",
       "executable": "mc_ui.exe"
     },

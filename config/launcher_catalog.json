@@ -1,7 +1,7 @@
 {
   "launcher": {
     "launcherVersion": "0.1.7",
-    "launcherDownloadUrl": "https://google.com",
+    "launcherDownloadUrl": "https://github.com/Bitig-Mod/bitig-launcher/releases/latest/download/mc_ui_windows.zip",
     "featuredVideoUrl": "https://samplefile.com/samples/download/video/mp4/mp4_sample_file_25MB.mp4/",
     "gameManifestUrl": "https://launchermeta.mojang.com/mc/game/version_manifest.json",
     "forgePromotionsUrl": "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json",
