@@ -196,6 +196,7 @@ Future<bool> installForge({
   required String forgeVersion,
   required Future<String?> Function() findJavaExecutable,
   required List<String> mavenRepositories,
+  void Function(int processed, int total, String name)? onFile,
 }) async {
   try {
     final installerFile = File('${mojangRoot.path}/forge-installer.jar');
@@ -210,7 +211,7 @@ Future<bool> installForge({
       return false;
     }
 
-    if (!await extractForgeLibraries(log: log, mojangRoot: mojangRoot, mavenRepositories: mavenRepositories)) {
+    if (!await extractForgeLibraries(log: log, mojangRoot: mojangRoot, mavenRepositories: mavenRepositories, onFile: onFile)) {
       log('ERROR: Failed to extract Forge libraries');
       return false;
     }
@@ -218,13 +219,30 @@ Future<bool> installForge({
     final versionsDir = Directory('${mojangRoot.path}/versions/$minecraftVersion');
     await versionsDir.create(recursive: true);
 
+    final v = forgeVersion.trim();
+    if (v.isNotEmpty) {
+      final expectedName = 'forge-$minecraftVersion-$v-$minecraftVersion-universal.jar';
+      final targetJar = File('${versionsDir.path}/$expectedName');
+      if (await targetJar.exists()) {
+        log('DEBUG: Forge universal JAR already installed, skipping installer');
+        return true;
+      }
+    } else {
+      final listed = await versionsDir.list().toList();
+      for (final e in listed) {
+        if (e is File && e.path.contains('forge') && e.path.endsWith('-universal.jar')) {
+          log('DEBUG: Forge universal JAR already present, skipping installer');
+          return true;
+        }
+      }
+    }
+
     final process = await Process.start(javaPath, ['-jar', installerFile.absolute.path, '--extract', '.'], workingDirectory: mojangRoot.path);
     process.stdout.listen((data) => log('FORGE INSTALLER OUTPUT: ${String.fromCharCodes(data)}'));
     process.stderr.listen((data) => log('FORGE INSTALLER ERROR: ${String.fromCharCodes(data)}'));
     final exitCode = await process.exitCode;
     if (exitCode != 0) return false;
 
-    final v = forgeVersion.trim();
     if (v.isEmpty) return false;
 
     final expectedName = 'forge-$minecraftVersion-$v-$minecraftVersion-universal.jar';

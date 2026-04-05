@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
 import 'package:archive/archive_io.dart';
@@ -28,13 +29,6 @@ class _JarEntry {
   final String version;
   final String path;
   _JarEntry({required this.artifact, required this.version, required this.path});
-}
-
-class _RemoteFileHint {
-  final String? etag;
-  final String? lastModified;
-  final int? contentLength;
-  _RemoteFileHint({this.etag, this.lastModified, this.contentLength});
 }
 
 class _DigestCollector implements Sink<Digest> {
@@ -81,6 +75,7 @@ class GameInstaller {
   static String _selectedModpackName = '';
   static String _selectedModpackZipUrl = '';
   static String _selectedModpackVersion = '';
+  static String _selectedModpackZipSha256 = '';
 
   static String _normalizeForgeVersion(String input) {
     final v = input.trim();
@@ -136,14 +131,16 @@ class GameInstaller {
     required String forgeVersion,
     required String zipUrl,
     required String modpackVersion,
+    String zipSha256 = '',
   }) async {
     _selectedModpackName = name.trim();
     _selectedMcVersion = mcVersion.trim();
     _selectedForgeVersion = _normalizeForgeVersion(forgeVersion);
     _selectedModpackZipUrl = zipUrl.trim();
     _selectedModpackVersion = modpackVersion.trim();
+    _selectedModpackZipSha256 = zipSha256.trim().toLowerCase();
     if (_dataRoot != null) {
-      _instanceRoot = Directory('${_dataRoot!.path}/instances/$_instanceSlug/game');
+      _instanceRoot = Directory('${_dataRoot!.path}/instances/$_instanceSlug');
       await _instanceRoot!.create(recursive: true);
       await _modpacksDownloadsRoot.create(recursive: true);
     }
@@ -154,11 +151,8 @@ class GameInstaller {
   static String get forgeVersion => _selectedForgeVersion;
   static String get forgeInstallerUrl => '';
   static String get forgePromotionsUrl => _launcherConfig?.forgePromotionsUrl ?? '';
-  static String get launcherVideoUrl => _launcherConfig?.videoUrl ?? '';
   static String get minecraftAssetBaseUrl => _launcherConfig?.minecraftAssetUrl ?? '';
   static List<String> get mavenRepositories => _launcherConfig?.mavenRepositories ?? [];
-  static String get selectedModpackZipUrl => _selectedModpackZipUrl;
-
   static Directory? _dataRoot;
   static Directory? _cacheRoot;
   static Directory? _instanceRoot;
@@ -167,7 +161,7 @@ class GameInstaller {
   static Directory get _downloadsRoot => Directory('${_dataRoot!.path}/downloads');
   static Directory get _modpacksDownloadsRoot => Directory('${_downloadsRoot.path}/modpacks/$_instanceSlug');
   static Directory get _mojangRoot => _cacheRoot!;
-  static Directory get _instanceGameRoot => _instanceRoot!;
+  static Directory get _instanceDir => _instanceRoot!;
 
   static Future<void> ensureVersionData() async {
     if (_cacheRoot == null || _instanceRoot == null) await initialize();
@@ -272,8 +266,8 @@ class GameInstaller {
 
     if (_selectedModpackZipUrl.trim().isNotEmpty) {
       result.total++;
-      final marker = File('${_instanceGameRoot.path}/.modpack_installed.json');
-      final installing = File('${_instanceGameRoot.path}/.modpack_installing.json');
+      final marker = File('${_instanceDir.path}/.modpack_installed.json');
+      final installing = File('${_instanceDir.path}/.modpack_installing.json');
       if (await installing.exists()) {
         result.missing++;
         result.missingModpack = true;
@@ -376,24 +370,21 @@ class GameInstaller {
       p(0.0, 'Preparing Forge installer');
       final okInstaller = await downloadForgeInstaller();
       if (!okInstaller) throw Exception('Forge installer download failed');
-      p(0.33, 'Extracting Forge libraries');
       int forgeProcessed = 0;
       int forgeTotal = 0;
-      final okForgeLibs = await _extractForgeLibraries(onFile: (pp, tt, _) {
+      p(0.2, 'Installing Forge');
+      final okForgeInstall = await installForge(onFile: (pp, tt, _) {
         forgeProcessed = pp;
         forgeTotal = tt;
         final denom = forgeTotal <= 0 ? 1 : forgeTotal;
-        final p01 = 0.33 + 0.34 * (forgeProcessed / denom).clamp(0.0, 1.0);
+        final p01 = 0.2 + 0.75 * (forgeProcessed / denom).clamp(0.0, 1.0);
         p(p01, 'Forge libraries ($forgeProcessed/$forgeTotal)');
       });
-      if (!okForgeLibs) throw Exception('Forge library extraction failed');
-      p(0.67, 'Installing Forge');
-      final okForgeInstall = await installForge();
       if (!okForgeInstall) throw Exception('Forge install failed');
       p(1.0, 'Forge ready');
     }));
     queue.add(FnTask('modpack', (p) async {
-      final zip = selectedModpackZipUrl.trim();
+      final zip = _selectedModpackZipUrl.trim();
       if (zip.isEmpty) {
         p(1.0, 'Modpack not required');
         return;
@@ -436,42 +427,65 @@ class GameInstaller {
     await f.writeAsString(const JsonEncoder.withIndent('  ').convert(data));
   }
 
-  static Future<_RemoteFileHint?> _tryHead(Uri uri) async {
+  static Future<String?> _sha256OfFile(File file) async {
     try {
-      final client = http.Client();
-      final resp = await client.head(uri).timeout(const Duration(seconds: 15));
-      client.close();
-      if (resp.statusCode < 200 || resp.statusCode >= 400) return null;
-      final h = resp.headers;
-      final len = int.tryParse(h['content-length'] ?? '');
-      return _RemoteFileHint(
-        etag: h['etag'],
-        lastModified: h['last-modified'],
-        contentLength: len,
-      );
+      final digestSink = _DigestCollector();
+      final sink = sha256.startChunkedConversion(digestSink);
+      await for (final chunk in file.openRead()) {
+        sink.add(chunk);
+      }
+      sink.close();
+      return digestSink.value?.toString();
     } catch (_) {
       return null;
     }
   }
 
+  static String _hexNorm(String? s) {
+    if (s == null) return '';
+    return s.trim().toLowerCase().replaceAll(RegExp(r'\s'), '');
+  }
+
+  static bool _zipRelativePathAllowed(String unixRelative) {
+    final normalized = unixRelative.replaceAll('\\', '/');
+    if (normalized.startsWith('/') || normalized.contains('://')) return false;
+    for (final seg in normalized.split('/')) {
+      if (seg.isEmpty || seg == '.' || seg == '..') return false;
+      if (Platform.isWindows) {
+        for (var i = 0; i < seg.length; i++) {
+          if (seg.codeUnitAt(i) < 32) return false;
+        }
+        if (seg.endsWith(' ') || seg.endsWith('.')) return false;
+        if (seg.contains(RegExp(r'[<>:"|?*]'))) return false;
+      }
+    }
+    return true;
+  }
+
   static bool _isRedirect(int code) => code == 301 || code == 302 || code == 303 || code == 307 || code == 308;
 
-  static Future<http.StreamedResponse> _sendWithRedirects(http.Client client, Uri uri) async {
-    Uri current = uri;
-    for (var i = 0; i < 5; i++) {
+  static Future<http.StreamedResponse> _modpackGet(http.Client client, Uri start) async {
+    Uri current = start;
+    for (var hop = 0; hop < 12; hop++) {
       final req = http.Request('GET', current);
+      req.followRedirects = false;
       final resp = await client.send(req);
       if (_isRedirect(resp.statusCode)) {
+        await resp.stream.drain();
         final loc = resp.headers['location'];
-        if (loc == null || loc.trim().isEmpty) return resp;
+        if (loc == null || loc.trim().isEmpty) {
+          return resp;
+        }
         final next = Uri.tryParse(loc);
-        if (next == null) return resp;
+        if (next == null) {
+          return resp;
+        }
         current = next.isAbsolute ? next : current.resolveUri(next);
         continue;
       }
       return resp;
     }
-    return client.send(http.Request('GET', current));
+    throw Exception('Modpack download: too many redirects');
   }
 
   static Future<void> _installModpackZip({
@@ -480,55 +494,65 @@ class GameInstaller {
   }) async {
     if (_cacheRoot == null || _instanceRoot == null) await initialize();
 
-    final targetDir = _instanceGameRoot;
+    final targetDir = _instanceDir;
     final modpackDir = _modpacksDownloadsRoot;
     await modpackDir.create(recursive: true);
 
     final zipFile = File('${modpackDir.path}/modpack.zip');
     final metaFile = _modpackMetaFile(modpackDir);
-    final meta = await _readJsonFile(metaFile);
+    var meta = await _readJsonFile(metaFile);
 
     final markerFile = File('${targetDir.path}/.modpack_installed.json');
     final installingFile = File('${targetDir.path}/.modpack_installing.json');
-    if (_selectedModpackVersion.isNotEmpty && await markerFile.exists()) {
+
+    var markerMatchesCatalog = false;
+    if (await markerFile.exists()) {
       try {
         final raw = await markerFile.readAsString();
         final data = jsonDecode(raw);
-        final prev = data is Map ? (data['modpackVersion'] as String?) : null;
-        if ((prev ?? '').trim() != _selectedModpackVersion) {
+        if (data is Map) {
+          final prevV = (data['modpackVersion'] as String?)?.trim() ?? '';
+          final prevU = (data['zipUrl'] as String?)?.trim() ?? '';
+          markerMatchesCatalog =
+              prevV == _selectedModpackVersion.trim() && prevU == zipUrl.trim();
         }
-      } catch (_) {
-      }
+      } catch (_) {}
     }
 
     final uri = Uri.parse(zipUrl);
-    final hint = await _tryHead(uri);
+    final catalogSha = kDebugMode ? '' : _hexNorm(_selectedModpackZipSha256);
+    final ver = _selectedModpackVersion.trim();
+    final zu = zipUrl.trim();
 
-    final remoteEtag = hint?.etag;
-    final remoteLastModified = hint?.lastModified;
-    final remoteLen = hint?.contentLength;
+    final metaSource = (meta['sourceUrl'] as String?)?.trim() ?? '';
+    final metaLogical = (meta['logicalVersion'] as String?)?.trim() ?? '';
+    final metaContentSha256 = _hexNorm(meta['contentSha256'] as String?);
+    final hasStoredSha256 = metaContentSha256.isNotEmpty;
+    final metaIdentityOk = metaSource == zu &&
+        (metaLogical == ver || (metaLogical.isEmpty && hasStoredSha256));
 
-    final cachedEtag = meta['etag'] as String?;
-    final cachedLastModified = meta['lastModified'] as String?;
-    final cachedLen = meta['contentLength'] is int ? meta['contentLength'] as int : int.tryParse('${meta['contentLength'] ?? ''}');
-    final cachedSha1 = meta['sha1'] as String?;
-    final installedSha1 = meta['installedSha1'] as String?;
-
-    final zipExists = await zipFile.exists();
-    final remoteLooksSame = (remoteEtag != null && cachedEtag != null && remoteEtag == cachedEtag) ||
-        (remoteLastModified != null &&
-            cachedLastModified != null &&
-            remoteLastModified == cachedLastModified &&
-            remoteLen != null &&
-            cachedLen != null &&
-            remoteLen == cachedLen);
-    final canAssumeCachedWhenNoHead = (hint == null && zipExists && cachedSha1 != null);
+    var skipModpackDownload = false;
+    if (await zipFile.exists()) {
+      if (catalogSha.isNotEmpty && metaIdentityOk) {
+        final d256 = await _sha256OfFile(zipFile);
+        if (d256 != null && _hexNorm(d256) == catalogSha) {
+          skipModpackDownload = true;
+        }
+      }
+      if (!skipModpackDownload && metaIdentityOk && metaContentSha256.isNotEmpty) {
+        final d256 = await _sha256OfFile(zipFile);
+        if (d256 != null && _hexNorm(d256) == metaContentSha256) {
+          skipModpackDownload = true;
+        }
+      }
+    }
 
     const downloadPortion = 0.70;
     const extractPortion = 0.30;
 
-    String? zipSha1 = cachedSha1;
-    if (!zipExists || (!remoteLooksSame && !canAssumeCachedWhenNoHead)) {
+    String? zipSha256 = meta['contentSha256'] as String?;
+
+    if (!skipModpackDownload) {
       reportProgress(0.0, 'Downloading modpack');
       final tmp = File('${zipFile.path}.part');
       if (await tmp.exists()) {
@@ -538,64 +562,85 @@ class GameInstaller {
       }
 
       final client = http.Client();
-      final streamed = await _sendWithRedirects(client, uri).timeout(const Duration(minutes: 5));
-      if (streamed.statusCode != 200) {
-        client.close();
-        final code = streamed.statusCode;
-        throw Exception('Modpack download failed: HTTP $code');
-      }
-
-      final total = remoteLen ?? streamed.contentLength;
-      int received = 0;
-      final sink = tmp.openWrite();
-      final digestSink = _DigestCollector();
-      final sha1Sink = sha1.startChunkedConversion(digestSink);
-
       try {
-        await for (final chunk in streamed.stream) {
-          received += chunk.length;
-          sink.add(chunk);
-          sha1Sink.add(chunk);
-          if (total != null && total > 0) {
-            reportProgress((received / total).clamp(0.0, 1.0) * downloadPortion,
-                'Downloading modpack (${(received / (1024 * 1024)).toStringAsFixed(1)}MB / ${(total / (1024 * 1024)).toStringAsFixed(1)}MB)');
-          } else {
-            reportProgress(0.0, 'Downloading modpack (${(received / (1024 * 1024)).toStringAsFixed(1)}MB)');
+        final resp = await _modpackGet(client, uri).timeout(const Duration(minutes: 5));
+        if (resp.statusCode != 200) {
+          await resp.stream.drain();
+          throw Exception('Modpack download failed: HTTP ${resp.statusCode}');
+        }
+
+        final total = resp.contentLength;
+        int received = 0;
+        final sink = tmp.openWrite();
+        final d256 = _DigestCollector();
+        final sha256Conv = sha256.startChunkedConversion(d256);
+        try {
+          await for (final chunk in resp.stream) {
+            received += chunk.length;
+            sink.add(chunk);
+            sha256Conv.add(chunk);
+            if (total != null && total > 0) {
+              reportProgress((received / total).clamp(0.0, 1.0) * downloadPortion,
+                  'Downloading modpack (${(received / (1024 * 1024)).toStringAsFixed(1)}MB / ${(total / (1024 * 1024)).toStringAsFixed(1)}MB)');
+            } else {
+              reportProgress(0.0, 'Downloading modpack (${(received / (1024 * 1024)).toStringAsFixed(1)}MB)');
+            }
+          }
+        } finally {
+          await sink.flush();
+          await sink.close();
+          sha256Conv.close();
+        }
+
+        zipSha256 = d256.value?.toString();
+
+        if (catalogSha.isNotEmpty) {
+          final got = _hexNorm(zipSha256);
+          if (got != catalogSha) {
+            try {
+              await tmp.delete();
+            } catch (_) {}
+            throw Exception('Modpack SHA-256 mismatch (catalog vs download)');
           }
         }
+
+        if (await zipFile.exists()) {
+          try {
+            await zipFile.delete();
+          } catch (_) {}
+        }
+        await tmp.rename(zipFile.path);
+
+        final installedSha256Keep = meta['installedSha256'];
+        meta = <String, dynamic>{
+          'sourceUrl': zu,
+          'logicalVersion': ver,
+          'contentSha256': zipSha256,
+          'installedSha256': installedSha256Keep,
+          'downloadedAt': DateTime.now().toIso8601String(),
+        };
+        await _writeJsonFile(metaFile, meta);
       } finally {
-        await sink.flush();
-        await sink.close();
-        sha1Sink.close();
         client.close();
       }
-
-      zipSha1 = digestSink.value?.toString();
-
-      if (await zipFile.exists()) {
-        try {
-          await zipFile.delete();
-        } catch (_) {}
-      }
-      await tmp.rename(zipFile.path);
-
-      await _writeJsonFile(metaFile, <String, dynamic>{
-        'sourceUrl': zipUrl,
-        'etag': remoteEtag ?? streamed.headers['etag'],
-        'lastModified': remoteLastModified ?? streamed.headers['last-modified'],
-        'contentLength': total,
-        'sha1': zipSha1,
-        'installedSha1': installedSha1,
-        'downloadedAt': DateTime.now().toIso8601String(),
-      });
     } else {
       reportProgress(downloadPortion, 'Modpack already downloaded');
+      zipSha256 = await _sha256OfFile(zipFile) ?? zipSha256;
     }
 
-    final markerExists = await markerFile.exists();
-    if (zipSha1 != null && installedSha1 != null && zipSha1 == installedSha1 && markerExists) {
-      reportProgress(1.0, 'Modpack already installed');
-      return;
+    meta = await _readJsonFile(metaFile);
+    final contentSha = _hexNorm(meta['contentSha256'] as String?);
+    final installedSha = _hexNorm(meta['installedSha256'] as String?);
+    if (await markerFile.exists() &&
+        markerMatchesCatalog &&
+        contentSha.isNotEmpty &&
+        installedSha.isNotEmpty &&
+        contentSha == installedSha) {
+      final disk256 = await _sha256OfFile(zipFile);
+      if (disk256 != null && _hexNorm(disk256) == contentSha) {
+        reportProgress(1.0, 'Modpack already installed');
+        return;
+      }
     }
 
     reportProgress(downloadPortion, 'Installing modpack');
@@ -604,12 +649,14 @@ class GameInstaller {
         'name': _selectedModpackName,
         'modpackVersion': _selectedModpackVersion,
         'zipUrl': zipUrl,
-        'zipSha1': zipSha1,
+        'zipSha256': zipSha256,
         'startedAt': DateTime.now().toIso8601String(),
       }),
       flush: true,
     );
-    final stagingDir = Directory('${modpackDir.path}/_staging/${zipSha1 ?? 'unknown'}');
+    final z256 = zipSha256?.trim();
+    final stagingKey = (z256 != null && z256.isNotEmpty) ? z256 : 'unknown';
+    final stagingDir = Directory('${modpackDir.path}/_staging/$stagingKey');
     if (await stagingDir.exists()) {
       try {
         await stagingDir.delete(recursive: true);
@@ -624,12 +671,13 @@ class GameInstaller {
     final totalEntries = entries.isEmpty ? 1 : entries.length;
     int processed = 0;
 
+    final stagedFiles = <File>[];
     for (final f in entries) {
       processed++;
 
       final rawName = f.name.replaceAll('\\', '/');
       final name = rawName.startsWith('/') ? rawName.substring(1) : rawName;
-      if (name.isEmpty) continue;
+      if (name.isEmpty || !_zipRelativePathAllowed(name)) continue;
 
       final destPath = '${stagingDir.path}/$name';
       final normalizedDest = File(destPath).absolute.path;
@@ -643,6 +691,7 @@ class GameInstaller {
         await outFile.parent.create(recursive: true);
         final data = f.content as List<int>;
         await outFile.writeAsBytes(data, flush: false);
+        stagedFiles.add(outFile);
       } else {
         await Directory(normalizedDest).create(recursive: true);
       }
@@ -651,27 +700,12 @@ class GameInstaller {
       reportProgress(p, 'Unpacking modpack ($processed/$totalEntries)');
     }
 
-    bool isExcludedRelPath(String relPath) => false;
-
-    final stagedFiles = <File>[];
-    await for (final entity in stagingDir.list(recursive: true, followLinks: false)) {
-      if (entity is File) stagedFiles.add(entity);
-    }
-    final newRelFiles = <String>{};
-    for (final f in stagedFiles) {
-      final rel = f.path.substring(stagingDir.path.length + 1).replaceAll('\\', '/');
-      if (rel.isNotEmpty) newRelFiles.add(rel);
-    }
-
-    final manifestFile = File('${targetDir.path}/.modpack_files.json');
-
     final totalFiles = stagedFiles.isEmpty ? 1 : stagedFiles.length;
     int copied = 0;
 
     for (final src in stagedFiles) {
       copied++;
       final rel = src.path.substring(stagingDir.path.length + 1).replaceAll('\\', '/');
-      if (isExcludedRelPath(rel)) continue;
 
       final out = File('${targetDir.path}/$rel');
       final normalizedOut = out.absolute.path;
@@ -684,21 +718,12 @@ class GameInstaller {
       reportProgress(p, 'Updating files ($copied/$totalFiles)');
     }
 
-    await _writeJsonFile(manifestFile, <String, dynamic>{
-      'name': _selectedModpackName,
-      'modpackVersion': _selectedModpackVersion,
-      'zipUrl': zipUrl,
-      'zipSha1': zipSha1,
-      'installedAt': DateTime.now().toIso8601String(),
-      'files': newRelFiles.toList()..sort(),
-    });
-
     await markerFile.writeAsString(
       const JsonEncoder.withIndent('  ').convert(<String, dynamic>{
         'name': _selectedModpackName,
         'modpackVersion': _selectedModpackVersion,
         'zipUrl': zipUrl,
-        'zipSha1': zipSha1,
+        'zipSha256': zipSha256,
         'installedAt': DateTime.now().toIso8601String(),
       }),
       flush: true,
@@ -706,7 +731,7 @@ class GameInstaller {
     final updated = await _readJsonFile(metaFile);
     await _writeJsonFile(metaFile, <String, dynamic>{
       ...updated,
-      'installedSha1': zipSha1,
+      'installedSha256': zipSha256,
       'installedAt': DateTime.now().toIso8601String(),
     });
     if (await installingFile.exists()) {
@@ -723,7 +748,7 @@ class GameInstaller {
     await _dataRoot!.create(recursive: true);
     _cacheRoot = Directory('${_dataRoot!.path}/cache/mojang');
     await _cacheRoot!.create(recursive: true);
-    _instanceRoot = Directory('${_dataRoot!.path}/instances/$_instanceSlug/game');
+    _instanceRoot = Directory('${_dataRoot!.path}/instances/$_instanceSlug');
     await _instanceRoot!.create(recursive: true);
     await _modpacksDownloadsRoot.create(recursive: true);
     _logger.debug('DEBUG: Directories created successfully');
@@ -903,17 +928,7 @@ class GameInstaller {
     );
   }
 
-  static Future<bool> downloadLaunchWrapper() async {
-    // This method is now handled by _extractForgeLibraries()
-    // which downloads all libraries from install_profile.json
-    return true;
-  }
-
-  static Future<bool> _extractForgeLibraries({void Function(int processed, int total, String name)? onFile}) async {
-    return forge.extractForgeLibraries(log: _logger.debug, mojangRoot: _mojangRoot, mavenRepositories: mavenRepositories, onFile: onFile);
-  }
-
-  static Future<bool> installForge() async {
+  static Future<bool> installForge({void Function(int processed, int total, String name)? onFile}) async {
     if (_cacheRoot == null || _instanceRoot == null) await initialize();
     return forge.installForge(
       log: _logger.debug,
@@ -922,6 +937,7 @@ class GameInstaller {
       forgeVersion: forgeVersion,
       findJavaExecutable: _findJavaExecutable,
       mavenRepositories: mavenRepositories,
+      onFile: onFile,
     );
   }
 
@@ -1133,7 +1149,7 @@ class GameInstaller {
 
       final classpath = await _buildClasspath();
       final assetsDir = '${_mojangRoot.path}/assets';
-      final gameDir = _instanceGameRoot.path;
+      final gameDir = _instanceDir.path;
 
       _logger.debug('DEBUG: Java: $javaPath');
       _logger.debug('DEBUG: Game Dir: $gameDir');

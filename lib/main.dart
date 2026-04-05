@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:video_player_media_kit/video_player_media_kit.dart';
 import 'package:media_kit/media_kit.dart';
@@ -17,20 +14,11 @@ void main() async {
 
   await setupDesktopWindow();
 
-  await _prepareLauncherDataLayout();
+  await LauncherDirs.dataRoot().create(recursive: true);
   await Logger.initFileLogging();
   await _initializeServices();
 
   runApp(const MyApp());
-}
-
-Future<void> _prepareLauncherDataLayout() async {
-  final root = LauncherDirs.dataRoot();
-  final versionFile = File('${root.path}/layout_version.json');
-  if (!await versionFile.exists()) {
-    await root.create(recursive: true);
-    await versionFile.writeAsString(jsonEncode(<String, dynamic>{'version': 1}), flush: true);
-  }
 }
 
 Future<void> _initializeServices() async {

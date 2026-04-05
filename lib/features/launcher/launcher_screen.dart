@@ -19,6 +19,7 @@ class ModpackInfo {
   final String forgeVersion;
   final String zipUrl;
   final String modpackVersion;
+  final String zipSha256;
   final bool live;
 
   ModpackInfo({
@@ -29,6 +30,7 @@ class ModpackInfo {
     required this.forgeVersion,
     required this.zipUrl,
     this.modpackVersion = '',
+    this.zipSha256 = '',
     this.live = false,
   });
 }
@@ -101,6 +103,7 @@ class _LauncherScreenState extends State<LauncherScreen> with TickerProviderStat
                   forgeVersion: m.forgeVersion,
                   zipUrl: m.zipUrl,
                   modpackVersion: m.modpackVersion,
+                  zipSha256: m.zipSha256,
                   live: m.live,
                 ),
               )
@@ -124,6 +127,7 @@ class _LauncherScreenState extends State<LauncherScreen> with TickerProviderStat
           forgeVersion: selected.forgeVersion,
           zipUrl: selected.zipUrl,
           modpackVersion: selected.modpackVersion,
+          zipSha256: selected.zipSha256,
         );
       }
     } catch (e) {
@@ -590,6 +594,7 @@ class _LauncherScreenState extends State<LauncherScreen> with TickerProviderStat
           forgeVersion: match.forgeVersion,
           zipUrl: match.zipUrl,
           modpackVersion: match.modpackVersion,
+          zipSha256: match.zipSha256,
         );
         await _checkGameFiles();
       } catch (e) {

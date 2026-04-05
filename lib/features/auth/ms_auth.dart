@@ -11,7 +11,7 @@ import 'package:http/http.dart' as http;
 import '../../domain/entities/entities.dart';
 import 'ms_auth_web.dart' show launchPopupAndWaitWeb;
 import '../../core/config/app_config.dart';
-import '../../core/net/client.dart';
+import '../../core/net/api_client.dart';
 import '../../core/logging/logger.dart';
 
 class MsAuth {
@@ -238,11 +238,15 @@ class MsAuth {
       if (_appAccessToken == null || _appAccessToken!.isEmpty) {
         throw Exception('No app access token; user needs to sign in.');
       }
-      final r = await HttpClient.get('/auth/me');
-      if (r.statusCode != 200) {
-        throw Exception('auth/me ${r.statusCode}: ${r.body}');
+      final res = await ApiClient.instance.get<Map<String, dynamic>>(
+        '/auth/me',
+        fromJson: (json) => json,
+      );
+      if (!res.isSuccess || res.data == null) {
+        final msg = res.error?.message ?? 'request failed';
+        throw Exception('auth/me ${res.statusCode}: $msg');
       }
-      return json.decode(r.body) as Map<String, dynamic>;
+      return res.data!;
     } else {
       await _ensureMcFresh();
       _logger.debug('GET $_mcProfileUrl');

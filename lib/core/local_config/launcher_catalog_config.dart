@@ -186,6 +186,7 @@ class ModpackLinks {
   final String zipUrl;
   final String iconPng;
   final String modpackVersion;
+  final String zipSha256;
   final bool live;
 
   const ModpackLinks({
@@ -196,6 +197,7 @@ class ModpackLinks {
     required this.zipUrl,
     this.iconPng = '',
     this.modpackVersion = '',
+    this.zipSha256 = '',
     this.live = false,
   });
 
@@ -204,6 +206,7 @@ class ModpackLinks {
     final videoUrl = (json['videoUrl'] as String?) ?? '';
     final zipUrl = (json['zipUrl'] as String?) ?? '';
     final iconPng = (json['iconPng'] as String?) ?? '';
+    final sha = (json['sha256'] as String?) ?? (json['zipSha256'] as String?) ?? '';
     return ModpackLinks(
       name: (json['name'] as String?) ?? '',
       mcVersion: (json['mcVersion'] as String?) ?? '',
@@ -212,6 +215,7 @@ class ModpackLinks {
       zipUrl: LauncherCatalogConfig._httpsUrlOrNull(zipUrl) ?? '',
       iconPng: LauncherCatalogConfig._httpsUrlOrNull(iconPng) ?? '',
       modpackVersion: (json['modpackVersion'] as String?) ?? '',
+      zipSha256: sha.trim(),
       live: liveVal == true || liveVal == 1 || (liveVal is String && liveVal.toLowerCase() == 'true'),
     );
   }

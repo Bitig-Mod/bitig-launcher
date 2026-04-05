@@ -61,7 +61,13 @@ class ApiClient {
 
     while (attempts < _maxRetries) {
       try {
-        final response = await request().timeout(_timeout);
+        var response = await request().timeout(_timeout);
+        if (response.statusCode == 401) {
+          final ok = await MsAuth.trySilentSignIn();
+          if (ok) {
+            response = await request().timeout(_timeout);
+          }
+        }
         return _handleResponse<T>(response, fromJson: fromJson);
       } on SocketException catch (e) {
         lastException = e;
